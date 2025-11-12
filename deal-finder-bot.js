@@ -29,7 +29,9 @@ async function fetchDealsFromKeepa() {
       page: 0,                           // Start at page 0
       domainId: 2,                       // UK Amazon - REQUIRED
       priceTypes: [0],                   // AMAZON price type - REQUIRED
-      dateRange: 0                       // Last 24 hours
+      dateRange: 0,                      // Last 24 hours
+      deltaPercentRange: [70, 100],      // 70-100% price drop (deals) - THIS FINDS DEALS
+      isFilterEnabled: true              // Enable filters
     };
 
     console.log('📤 Sending POST request to Keepa API...');
@@ -224,3 +226,4 @@ process.on('SIGINT', () => {
   console.log('\n👋 Bot shutting down gracefully...');
   process.exit(0);
 });
+
