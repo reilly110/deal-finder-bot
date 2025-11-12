@@ -11,9 +11,10 @@ if (!KEEPA_API_KEY || !DISCORD_WEBHOOK_URL) {
   process.exit(1);
 }
 
-async function fetchDealsFromKeepa() {
+// Get ASINs from /deal endpoint
+async function getDealsASINs() {
   try {
-    console.log('🔍 Querying Keepa...');
+    console.log('📋 Getting deal ASINs from Keepa...');
     
     const keepaUrl = 'https://api.keepa.com/deal';
     const queryJSON = {
@@ -26,7 +27,6 @@ async function fetchDealsFromKeepa() {
     };
 
     const urlWithKey = `${keepaUrl}?key=${KEEPA_API_KEY}`;
-
     const response = await fetch(urlWithKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -34,110 +34,126 @@ async function fetchDealsFromKeepa() {
     });
 
     const data = await response.json();
-    
-    console.log('Response keys:', Object.keys(data));
-    console.log('deals field exists:', !!data.deals);
-    console.log('deals is array:', Array.isArray(data.deals));
-    
-    let products = [];
-    
-    // Recursively find objects with asin field
-    function findProducts(obj, depth = 0) {
-      if (depth > 3) return [];
-      if (!obj) return [];
-      
-      if (Array.isArray(obj)) {
-        if (obj.length > 0 && obj[0].asin) {
-          return obj;
-        }
-        for (let item of obj) {
-          const found = findProducts(item, depth + 1);
-          if (found.length > 0) return found;
-        }
-      } else if (typeof obj === 'object') {
-        for (let key in obj) {
-          const found = findProducts(obj[key], depth + 1);
-          if (found.length > 0) return found;
-        }
-      }
-      return [];
-    }
-    
-    products = findProducts(data);
+    console.log(`Tokens left: ${data.tokensLeft}`);
 
-    if (products.length === 0) {
-      console.log('No products array found');
+    if (!data.products || data.products.length === 0) {
+      console.log('No deals found');
       return [];
     }
 
-    const deals = products.slice(0, 20).map(p => {
-      const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
-      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
-      
-      // Calculate discount from actual prices - this is DEFINITIVE
-      let discount = 0;
-      if (currentPrice > 0 && avgPrice > currentPrice) {
-        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
-      }
-      
-      return {
-        asin: p.asin,
-        title: p.title || 'Product',
-        currentPrice: (currentPrice / 100).toFixed(2),
-        avgPrice: (avgPrice / 100).toFixed(2),
-        discount: discount,
-        available: currentPrice > 0,
-        link: `https://amazon.com/dp/${p.asin}`
-      };
-    })
-    .filter(d => d.available && d.discount > 50)  // Strict: ONLY >50%
-    .slice(0, 5);
-    
-    console.log(`✅ Found ${deals.length} valid deals >50% off`);
-    return deals;
+    // Extract ASINs from products
+    const asins = data.products.map(p => p.asin).slice(0, 5);
+    console.log(`Found ${asins.length} deal ASINs: ${asins.join(', ')}`);
+    return asins;
 
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Error getting ASINs:', error.message);
     return [];
   }
 }
 
-async function getProductCoupons(asin) {
+// Get detailed product info including prices
+async function getProductDetails(asin) {
   try {
     const keepaUrl = 'https://api.keepa.com/product';
     const params = new URLSearchParams({
       key: KEEPA_API_KEY,
-      domain: 2,  // UK
+      domain: 1,
       asin: asin,
-      offers: 20  // Get offer details including coupons
+      stats: 1
     });
 
     const response = await fetch(`${keepaUrl}?${params.toString()}`);
     const data = await response.json();
 
-    if (data.products && data.products.length > 0) {
-      const product = data.products[0];
-      let couponText = '';
-
-      // Check marketplace offers for coupons
-      if (product.offers && Array.isArray(product.offers)) {
-        product.offers.forEach(offer => {
-          if (offer.coupon !== undefined) {
-            if (offer.coupon < 0) {
-              couponText += `💰 ${Math.abs(offer.coupon)}% coupon\n`;
-            } else if (offer.coupon > 0) {
-              couponText += `💰 £${(offer.coupon/100).toFixed(2)} coupon\n`;
-            }
-          }
-        });
-      }
-
-      return couponText.trim() || null;
+    if (!data.products || data.products.length === 0) {
+      return null;
     }
+
+    const product = data.products[0];
+    
+    // Extract price data from stats
+    let currentPrice = 0;
+    let avgPrice = 0;
+    
+    if (product.stats && Array.isArray(product.stats)) {
+      // stats[0] is typically the buy box price stats
+      const buyBoxStats = product.stats[0];
+      if (Array.isArray(buyBoxStats) && buyBoxStats.length > 0) {
+        currentPrice = buyBoxStats[0] || 0;  // First element is current price
+        
+        // Average is usually found by analyzing the array
+        // For now use current as fallback
+        if (buyBoxStats.length > 10) {
+          avgPrice = buyBoxStats[1] || currentPrice;
+        } else {
+          avgPrice = currentPrice;
+        }
+      }
+    }
+
+    // Fallback: try direct price fields if available
+    if (currentPrice === 0 && product.current) {
+      currentPrice = Array.isArray(product.current) ? product.current[0] : product.current;
+    }
+    if (avgPrice === 0 && product.avg) {
+      avgPrice = Array.isArray(product.avg) ? 
+        (Array.isArray(product.avg[0]) ? product.avg[0][0] : product.avg[0]) : 
+        product.avg;
+    }
+
+    // Calculate discount
+    let discount = 0;
+    if (currentPrice > 0 && avgPrice > currentPrice) {
+      discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
+    }
+
+    console.log(`${product.title?.substring(0, 40)} | Discount: ${discount}% | Current: $${(currentPrice/100).toFixed(2)} | Avg: $${(avgPrice/100).toFixed(2)}`);
+
+    return {
+      asin: asin,
+      title: product.title || 'Product',
+      currentPrice: (currentPrice / 100).toFixed(2),
+      avgPrice: (avgPrice / 100).toFixed(2),
+      discount: discount,
+      link: `https://amazon.com/dp/${asin}`
+    };
+
   } catch (error) {
-    console.error(`Error fetching coupons for ${asin}:`, error.message);
+    console.error(`Error getting details for ${asin}:`, error.message);
+    return null;
   }
-  return null;
+}
+
+async function fetchDealsFromKeepa() {
+  try {
+    console.log('🔍 Fetching deals...');
+    
+    // Step 1: Get ASINs from /deal endpoint
+    const asins = await getDealsASINs();
+    
+    if (asins.length === 0) {
+      return [];
+    }
+
+    // Step 2: Get details for each ASIN using /product endpoint
+    console.log('📊 Verifying prices with /product endpoint...');
+    const deals = [];
+    
+    for (const asin of asins) {
+      const details = await getProductDetails(asin);
+      if (details && details.discount > 50) {
+        deals.push(details);
+      }
+    }
+
+    console.log(`✅ Found ${deals.length} verified deals >50% off`);
+    return deals;
+
+  } catch (error) {
+    console.error('Error fetching deals:', error.message);
+    return [];
+  }
 }
 
 async function postToDiscord(deals) {
@@ -147,42 +163,25 @@ async function postToDiscord(deals) {
   }
 
   try {
-    // Fetch coupons for each deal
-    console.log('Fetching coupon details...');
-    const dealsWithCoupons = await Promise.all(
-      deals.map(async (d) => {
-        const couponInfo = await getProductCoupons(d.asin);
-        return { ...d, couponInfo };
-      })
-    );
+    console.log(`📤 Posting ${deals.length} deals to Discord...`);
 
-    const embeds = dealsWithCoupons.map(d => {
-      const fields = [
-        { name: 'Was', value: `£${d.avgPrice}`, inline: true },
-        { name: 'Now', value: `£${d.currentPrice}`, inline: true },
-        { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! £${d.currentPrice} #AmazonDeals`, inline: false }
-      ];
-
-      // Add coupon field if available
-      if (d.couponInfo) {
-        fields.push({ name: '🎟️ Available Coupons', value: d.couponInfo, inline: false });
-      }
-
-      fields.push({ name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false });
-
-      return {
-        title: `🔥 ${d.title.substring(0, 80)}`,
-        description: `**${d.discount}% OFF** - £${d.currentPrice}`,
-        fields: fields,
-        color: 16711680
-      };
-    });
+    const embeds = deals.map(d => ({
+      title: `🔥 ${d.title.substring(0, 80)}`,
+      description: `**${d.discount}% OFF** - $${d.currentPrice}`,
+      fields: [
+        { name: 'Was', value: `$${d.avgPrice}`, inline: true },
+        { name: 'Now', value: `$${d.currentPrice}`, inline: true },
+        { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! $${d.currentPrice} #AmazonDeals`, inline: false },
+        { name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
+      ],
+      color: 16711680
+    }));
 
     const response = await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `🚨 **MEGA DEALS ALERT** 🚨\n🔥 **${deals.length} Amazon.com deals >50% OFF** 🔥\n_Last updated: ${new Date().toLocaleString()}_\n\n⬇️ Copy & Paste Ready 👇`,
+        content: `🚨 **MEGA DEALS ALERT** 🚨\n🔥 **${deals.length} Amazon deals >50% OFF** 🔥\n_Last updated: ${new Date().toLocaleString()}_\n\n⬇️ Copy & Paste Ready 👇`,
         embeds: embeds,
         username: 'Deal Finder Bot',
         avatar_url: 'https://cdn-icons-png.flaticon.com/512/2721/2721215.png'
@@ -204,8 +203,6 @@ async function runBot() {
 }
 
 console.log('🤖 Deal Finder Bot Started');
-
-// Run immediately
 runBot();
 
 // Schedule every 6 hours
@@ -213,7 +210,7 @@ cron.schedule('0 */6 * * *', runBot);
 
 // HTTP Server
 const PORT = process.env.PORT || 3000;
-const server = http.createServer(async (req, res) => {
+const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
 
   if (req.url === '/' || req.url === '/health') {
@@ -223,36 +220,6 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200);
     res.end(JSON.stringify({ status: 'triggered' }));
     runBot();
-  } else if (req.url === '/debug') {
-    try {
-      const keepaUrl = 'https://api.keepa.com/deal';
-      const queryJSON = {
-        page: 0,
-        domainId: 1,
-        priceTypes: [0],
-        dateRange: 1,
-        deltaPercentRange: [50, 100],
-        isFilterEnabled: true
-      };
-
-      const urlWithKey = `${keepaUrl}?key=${KEEPA_API_KEY}`;
-      const resp = await fetch(urlWithKey, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(queryJSON)
-      });
-
-      const data = await resp.json();
-      
-      res.writeHead(200);
-      res.end(JSON.stringify({
-        allKeys: Object.keys(data),
-        fullResponse: data
-      }, null, 2));
-    } catch (error) {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: error.message }));
-    }
   } else {
     res.writeHead(404);
     res.end(JSON.stringify({ error: 'Not found' }));
@@ -261,7 +228,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`📡 Listening on port ${PORT}`);
-  console.log(`Health: http://localhost:${PORT}/health`);
-  console.log(`Trigger: http://localhost:${PORT}/trigger`);
-  console.log(`Debug: http://localhost:${PORT}/debug`);
+  console.log(`Trigger: https://deal-finder-bot-sbd8.onrender.com/trigger`);
 });
