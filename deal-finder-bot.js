@@ -2,278 +2,183 @@ const fetch = require('node-fetch');
 const cron = require('node-cron');
 const http = require('http');
 
-// Environment variables
 const KEEPA_API_KEY = process.env.KEEPA_API_KEY;
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const AMAZON_ASSOCIATES_ID = process.env.AMAZON_ASSOCIATES_ID || 'pricedropuk0c-21';
 
-if (!KEEPA_API_KEY) {
-  console.error('ERROR: KEEPA_API_KEY not set in environment variables');
+if (!KEEPA_API_KEY || !DISCORD_WEBHOOK_URL) {
+  console.error('Missing environment variables');
   process.exit(1);
 }
 
-if (!DISCORD_WEBHOOK_URL) {
-  console.error('ERROR: DISCORD_WEBHOOK_URL not set in environment variables');
-  process.exit(1);
-}
-
-// Function to fetch deals from Keepa Browsing Deals API
 async function fetchDealsFromKeepa() {
-  console.log('DEBUG: fetchDealsFromKeepa() called');
   try {
-    console.log('🔍 Querying Keepa for deals...');
+    console.log('🔍 Querying Keepa...');
     
-    // Keepa Browsing Deals endpoint
     const keepaUrl = 'https://api.keepa.com/deal';
-    
-    // Build the queryJSON according to Keepa API documentation
     const queryJSON = {
-      page: 0,                           // Start at page 0
-      domainId: 2,                       // UK Amazon - REQUIRED
-      priceTypes: [0],                   // AMAZON price type - REQUIRED
-      dateRange: 0,                      // Last 24 hours
-      deltaPercentRange: [50, 100],      // 50-100% price drop - LOWERED TO TEST
-      isFilterEnabled: true              // Enable filters
+      page: 0,
+      domainId: 2,
+      priceTypes: [0],
+      dateRange: 0,
+      deltaPercentRange: [50, 100],
+      isFilterEnabled: true
     };
 
-    console.log('📤 Sending POST request to Keepa API...');
-    console.log('Query:', JSON.stringify(queryJSON, null, 2));
-
-    // Build URL with key in query string (not in body)
     const urlWithKey = `${keepaUrl}?key=${KEEPA_API_KEY}`;
 
     const response = await fetch(urlWithKey, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(queryJSON)
     });
 
-    const responseData = await response.json();
+    const data = await response.json();
+    
+    console.log('Response keys:', Object.keys(data));
+    console.log('deals field exists:', !!data.deals);
+    console.log('deals is array:', Array.isArray(data.deals));
+    
+    // deals is NOT an array, it's metadata. Look for products array
+    let products = [];
+    
+    // Try to find an array of products
+    for (const key in data) {
+      if (Array.isArray(data[key]) && data[key].length > 0) {
+        if (typeof data[key][0] === 'object' && data[key][0].asin) {
+          products = data[key];
+          console.log(`Found products in field: ${key} (${products.length} items)`);
+          break;
+        }
+      }
+    }
 
-    console.log(`API Response Status: ${response.status}`);
-    console.log('DEBUG: Response received, parsing...');
-
-    if (!response.ok) {
-      console.error(`Keepa API error: ${response.status} ${response.statusText}`);
-      console.error('Response:', JSON.stringify(responseData, null, 2));
+    if (products.length === 0) {
+      console.log('No products array found');
       return [];
     }
 
-    // Check for API errors in response
-    if (responseData.error) {
-      console.error('❌ Keepa API Error:', responseData.error.message);
-      console.error('Details:', responseData.error.details);
-      return [];
-    }
+    const deals = products.slice(0, 5).map(p => ({
+      asin: p.asin,
+      title: p.title || 'Product',
+      currentPrice: p.current ? (p.current[0] / 100).toFixed(2) : 'N/A',
+      avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
+      discount: Math.abs(p.delta || 0),
+      link: `https://amazon.co.uk/dp/${p.asin}`
+    }));
 
-    console.log('DEBUG: Checking for deals...');
-    console.log('DEBUG: responseData.deals:', responseData.deals);
-    console.log('DEBUG: responseData.deals is array?', Array.isArray(responseData.deals));
-    
-    // Check if we got products - deals is the correct field
-    let products = responseData.deals;
-    
-    if (!Array.isArray(products)) {
-      products = responseData.products || responseData.data || [];
-    }
-    
-    console.log('Products found via:', responseData.deals ? 'responseData.deals' : 'fallback');
-    console.log('Products array length:', products ? products.length : 0);
-    
-    if (!products || products.length === 0) {
-      console.log('ℹ️  No deals found matching criteria');
-      console.log('Full response keys:', Object.keys(responseData));
-      return [];
-    }
-
-    console.log(`✅ Got ${products.length} deals from Keepa`);
-
-    // Process products into formatted deals
-    const deals = products
-      .map(product => {
-        // Extract prices - Keepa stores prices as integers (pence for UK)
-        const currentPrice = product.current && product.current.length > 0
-          ? (product.current[0] / 100).toFixed(2)
-          : 'N/A';
-        
-        // Get average price (for comparison)
-        const avgPrice = product.avg && product.avg.length > 0
-          ? (product.avg[0] / 100).toFixed(2)
-          : currentPrice;
-
-        return {
-          asin: product.asin || 'N/A',
-          title: product.title || 'Product',
-          currentPrice: currentPrice,
-          avgPrice: avgPrice,
-          discount: Math.abs(product.delta || 0), // Delta is the percentage discount
-          rating: product.rating ? product.rating / 10 : 0, // Keepa stores as 0-50
-          reviews: product.reviews || 0,
-          link: `https://amazon.co.uk/dp/${product.asin}`
-        };
-      })
-      .sort((a, b) => b.discount - a.discount) // Sort by highest discount first
-      .slice(0, 5); // Top 5 deals
-
-    console.log(`✅ Formatted ${deals.length} deals for Discord`);
+    console.log(`✅ Found ${deals.length} deals`);
     return deals;
-    
+
   } catch (error) {
-    console.error('❌ Error fetching from Keepa:', error.message);
-    if (error.stack) {
-      console.error('Stack:', error.stack);
-    }
+    console.error('Error:', error.message);
     return [];
   }
 }
 
-// Function to post to Discord
 async function postToDiscord(deals) {
-  console.log('DEBUG: postToDiscord() called with', deals.length, 'deals');
   if (deals.length === 0) {
-    console.log('ℹ️  No deals to post to Discord');
+    console.log('No deals to post');
     return;
   }
 
   try {
-    console.log(`📤 Posting ${deals.length} deals to Discord...`);
-
-    // Create embed messages for Discord
-    const embeds = deals.map(deal => ({
-      title: `🔥 ${deal.title.substring(0, 100)}${deal.title.length > 100 ? '...' : ''}`,
-      description: `**${deal.discount}% OFF** 💰`,
+    const embeds = deals.map(d => ({
+      title: `🔥 ${d.title.substring(0, 80)}`,
+      description: `**${d.discount}% OFF**`,
       fields: [
-        {
-          name: '💷 Current Price',
-          value: `£${deal.currentPrice}`,
-          inline: true
-        },
-        {
-          name: 'Average Price',
-          value: `£${deal.avgPrice}`,
-          inline: true
-        },
-        {
-          name: '📊 Discount',
-          value: `${deal.discount}%`,
-          inline: true
-        },
-        {
-          name: '⭐ Rating',
-          value: `${(deal.rating).toFixed(1)}/5 (${deal.reviews} reviews)`,
-          inline: true
-        },
-        {
-          name: '🔗 Buy Now',
-          value: `[View on Amazon](${deal.link}?tag=${AMAZON_ASSOCIATES_ID})`,
-          inline: false
-        }
+        { name: 'Price', value: `£${d.currentPrice}`, inline: true },
+        { name: 'Discount', value: `${d.discount}%`, inline: true },
+        { name: 'Link', value: `[Buy](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
       ],
-      color: 16711680, // Red color for hot deals
-      footer: {
-        text: 'Deal Finder Bot | Amazon UK | Keepa API'
-      },
-      timestamp: new Date().toISOString()
+      color: 16711680
     }));
-
-    const payload = {
-      content: `🎉 **Found ${deals.length} Hot Amazon Deals!** 🔥\n_70%+ discounts from the last 24 hours_`,
-      embeds: embeds,
-      username: 'Deal Finder Bot',
-      avatar_url: 'https://cdn-icons-png.flaticon.com/512/2721/2721215.png'
-    };
 
     const response = await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `🎉 Found ${deals.length} deals!`,
+        embeds: embeds,
+        username: 'Deal Finder Bot'
+      })
     });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Discord webhook error: ${response.status} - ${errorBody}`);
+    if (response.ok) {
+      console.log('✅ Posted to Discord');
     }
-
-    console.log(`✅ Successfully posted ${deals.length} deals to Discord`);
-    return true;
-    
   } catch (error) {
-    console.error('❌ Error posting to Discord:', error.message);
-    return false;
+    console.error('Discord error:', error.message);
   }
 }
 
-// Main function to run the bot
 async function runBot() {
-  console.log('DEBUG: runBot() started');
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`⏰ [${new Date().toLocaleString()}] Running deal search...`);
-  console.log(`${'='.repeat(60)}`);
-  
-  console.log('DEBUG: Calling fetchDealsFromKeepa()');
+  console.log('\n🤖 Running bot...');
   const deals = await fetchDealsFromKeepa();
-  console.log('DEBUG: Got deals back:', deals.length);
-  
-  console.log('DEBUG: Calling postToDiscord()');
   await postToDiscord(deals);
-  console.log('DEBUG: postToDiscord() complete');
-  
-  console.log(`${'='.repeat(60)}\n`);
 }
 
-// Start the bot
-console.log('🤖 Deal Finder Bot Starting...');
-console.log('📡 Environment:', {
-  keepa_api_key: KEEPA_API_KEY ? '✅ Set' : '❌ Missing',
-  discord_webhook: DISCORD_WEBHOOK_URL ? '✅ Set' : '❌ Missing',
-  affiliate_id: AMAZON_ASSOCIATES_ID
-});
+console.log('🤖 Deal Finder Bot Started');
 
-// Run once immediately on startup
+// Run immediately
 runBot();
 
-// Schedule to run every 6 hours (0, 6, 12, 18 UTC)
-cron.schedule('0 */6 * * *', () => {
-  runBot();
-});
+// Schedule every 6 hours
+cron.schedule('0 */6 * * *', runBot);
 
-console.log('✅ Bot is running. Deals will be fetched every 6 hours.');
-console.log('⏸️  Press Ctrl+C to stop.\n');
-
-// Create HTTP server to satisfy Render's port requirement
+// HTTP Server
 const PORT = process.env.PORT || 3000;
-const server = http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'Deal Finder Bot is running', timestamp: new Date().toISOString() }));
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+
+  if (req.url === '/' || req.url === '/health') {
+    res.writeHead(200);
+    res.end(JSON.stringify({ status: 'running' }));
   } else if (req.url === '/trigger') {
-    console.log('DEBUG: /trigger endpoint called at', new Date().toLocaleString());
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'Triggering bot manually...', timestamp: new Date().toISOString() }));
-    // Run bot immediately
-    console.log('DEBUG: About to call runBot()');
-    runBot().catch(err => console.error('DEBUG: Error in runBot():', err));
-    console.log('DEBUG: runBot() called');
+    res.writeHead(200);
+    res.end(JSON.stringify({ status: 'triggered' }));
+    runBot();
+  } else if (req.url === '/debug') {
+    try {
+      const keepaUrl = 'https://api.keepa.com/deal';
+      const queryJSON = {
+        page: 0,
+        domainId: 2,
+        priceTypes: [0],
+        dateRange: 0,
+        deltaPercentRange: [50, 100],
+        isFilterEnabled: true
+      };
+
+      const urlWithKey = `${keepaUrl}?key=${KEEPA_API_KEY}`;
+      const resp = await fetch(urlWithKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(queryJSON)
+      });
+
+      const data = await resp.json();
+      
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        responseKeys: Object.keys(data),
+        deals: typeof data.deals,
+        dealsIsArray: Array.isArray(data.deals),
+        sample: JSON.stringify(data.deals).substring(0, 200)
+      }, null, 2));
+    } catch (error) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: error.message }));
+    }
   } else {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404);
     res.end(JSON.stringify({ error: 'Not found' }));
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`📡 HTTP server listening on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Manual trigger: http://localhost:${PORT}/trigger`);
-});
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n👋 Bot shutting down gracefully...');
-  server.close();
-  process.exit(0);
+  console.log(`📡 Listening on port ${PORT}`);
+  console.log(`Health: http://localhost:${PORT}/health`);
+  console.log(`Trigger: http://localhost:${PORT}/trigger`);
+  console.log(`Debug: http://localhost:${PORT}/debug`);
 });
