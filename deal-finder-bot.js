@@ -21,7 +21,7 @@ async function fetchDealsFromKeepa() {
       domainId: 2,
       priceTypes: [0],
       dateRange: 1,  // Last 7 days instead of 24 hours
-      deltaPercentRange: [1, 100],  // Get ANY deals from Keepa
+      deltaPercentRange: [30, 100],  // 30%+ deals
       isFilterEnabled: true
     };
 
@@ -93,7 +93,7 @@ async function fetchDealsFromKeepa() {
         link: `https://amazon.co.uk/dp/${p.asin}`
       };
     })
-    .filter(d => d.available && d.discount > 50)  // Back to 50% for real posts
+    .filter(d => d.available && d.discount >= 30)  // 30%+ off
     .slice(0, 5);
     
     console.log(`✅ Found ${deals.length} valid deals >50% off`);
@@ -234,7 +234,7 @@ const server = http.createServer(async (req, res) => {
         domainId: 2,
         priceTypes: [0],
         dateRange: 1,
-        deltaPercentRange: [1, 100],
+        deltaPercentRange: [30, 100],
         isFilterEnabled: true
       };
 
