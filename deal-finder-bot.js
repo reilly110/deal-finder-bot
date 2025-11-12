@@ -21,7 +21,7 @@ async function fetchDealsFromKeepa() {
       domainId: 1,
       priceTypes: [0],
       dateRange: 1,
-      deltaPercentRange: [1, 100],  // Capture everything
+      deltaPercentRange: [10, 100],  // Get broader range, filter >50% ourselves
       isFilterEnabled: true
     };
 
