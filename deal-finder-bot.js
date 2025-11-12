@@ -77,10 +77,14 @@ async function fetchDealsFromKeepa() {
       avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
       discount: Math.abs(p.delta && p.delta[0] ? p.delta[0] : 0),
       link: `https://amazon.co.uk/dp/${p.asin}`
-    })).filter(d => d.discount > 50);  // ONLY >50% off
-
-    console.log(`✅ Found ${deals.length} deals`);
-    return deals;
+    }));
+    
+    console.log('Top 5 discounts found:', deals.slice(0, 5).map(d => `${d.discount}% - ${d.title.substring(0, 40)}`));
+    
+    const filtered = deals.filter(d => d.discount > 50);
+    console.log(`✅ Found ${filtered.length} deals >50% off`);
+    
+    return filtered;
 
   } catch (error) {
     console.error('Error:', error.message);
