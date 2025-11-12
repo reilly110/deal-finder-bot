@@ -17,8 +17,14 @@ async function scrapeDeals() {
   try {
     console.log('🔍 Fetching CamelCamelCamel deals RSS feed...');
     
-    // CamelCamelCamel RSS feed for deals
-    const feed = await parser.parseURL('https://www.camelcamelcamel.com/rss/deals');
+    // Add user-agent to bypass blocking
+    const customParser = new Parser({
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    const feed = await customParser.parseURL('https://slickdeals.net/deals/amazon-deals/?rss=1');
     
     console.log(`📰 Got ${feed.items.length} items from RSS feed`);
     
