@@ -39,30 +39,31 @@ async function fetchDealsFromKeepa() {
     console.log('deals field exists:', !!data.deals);
     console.log('deals is array:', Array.isArray(data.deals));
     
-    // deals is an object, products are nested inside it
     let products = [];
     
-    if (data.deals && typeof data.deals === 'object') {
-      console.log('Keys in deals:', Object.keys(data.deals).slice(0, 20));
-      if (Array.isArray(data.deals.products)) {
-        products = data.deals.products;
-        console.log(`Found products in deals.products: ${products.length}`);
-      } else if (data.deals.asins && Array.isArray(data.deals.asins)) {
-        products = data.deals.asins;
-        console.log(`Found products in deals.asins: ${products.length}`);
-      } else {
-        // Find any array with product objects (has asin, title)
-        for (const key in data.deals) {
-          if (Array.isArray(data.deals[key]) && data.deals[key].length > 0) {
-            if (data.deals[key][0] && data.deals[key][0].asin) {
-              products = data.deals[key];
-              console.log(`Found products in deals.${key}: ${products.length}`);
-              break;
-            }
-          }
+    // Recursively find objects with asin field
+    function findProducts(obj, depth = 0) {
+      if (depth > 3) return [];
+      if (!obj) return [];
+      
+      if (Array.isArray(obj)) {
+        if (obj.length > 0 && obj[0].asin) {
+          return obj;
+        }
+        for (let item of obj) {
+          const found = findProducts(item, depth + 1);
+          if (found.length > 0) return found;
+        }
+      } else if (typeof obj === 'object') {
+        for (let key in obj) {
+          const found = findProducts(obj[key], depth + 1);
+          if (found.length > 0) return found;
         }
       }
+      return [];
     }
+    
+    products = findProducts(data);
 
     if (products.length === 0) {
       console.log('No products array found');
