@@ -37,6 +37,22 @@ async function scrapeLightningDeals() {
     const html = await response.text();
     const $ = cheerio.load(html);
     
+    // Debug: check if we got actual Amazon page
+    const pageTitle = $('title').text();
+    console.log(`Page title: ${pageTitle}`);
+    console.log(`HTML length: ${html.length} characters`);
+    
+    // Look for deal card selectors
+    const dealCards = $('[data-component-type="s-deal-card"]');
+    console.log(`Found ${dealCards.length} deal cards with selector 1`);
+    
+    // Try alternate selectors
+    const dealCards2 = $('.s-deal-card');
+    console.log(`Found ${dealCards2.length} deal cards with selector 2`);
+    
+    const allDivs = $('div[class*="deal"]');
+    console.log(`Found ${allDivs.length} divs with "deal" in class`);
+    
     const deals = [];
     
     // Amazon Lightning Deals structure - look for deal items
