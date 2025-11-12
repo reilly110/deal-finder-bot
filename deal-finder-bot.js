@@ -21,7 +21,7 @@ async function fetchDealsFromKeepa() {
       domainId: 2,
       priceTypes: [0],
       dateRange: 1,  // Last 7 days instead of 24 hours
-      deltaPercentRange: [30, 100],  // 30%+ deals
+      deltaPercentRange: [50, 100],  // 50%+ off
       isFilterEnabled: true
     };
 
@@ -71,29 +71,26 @@ async function fetchDealsFromKeepa() {
     }
 
     const deals = products.slice(0, 20).map(p => {
-      const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : null;
-      const avgPrice = (Array.isArray(p.avg) && p.avg[0]) ? p.avg[0] : null;
+      const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
+      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : currentPrice;
       
+      // Use Keepa's calculated discount from delta[0][0]
       let discount = 0;
-      if (currentPrice && avgPrice && currentPrice > 0 && avgPrice > 0 && currentPrice < avgPrice) {
-        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
-      }
-      
-      if (products.indexOf(p) < 3) {
-        console.log(`DEBUG: ${p.title?.substring(0, 30)} | Avg: ${avgPrice} | Current: ${currentPrice} | Discount: ${discount}%`);
+      if (Array.isArray(p.delta) && Array.isArray(p.delta[0]) && p.delta[0][0]) {
+        discount = Math.abs(p.delta[0][0]);
       }
       
       return {
         asin: p.asin,
         title: p.title || 'Product',
-        currentPrice: currentPrice ? (currentPrice / 100).toFixed(2) : 'N/A',
-        avgPrice: avgPrice ? (avgPrice / 100).toFixed(2) : 'N/A',
+        currentPrice: (currentPrice / 100).toFixed(2),
+        avgPrice: (avgPrice / 100).toFixed(2),
         discount: discount,
-        available: currentPrice && currentPrice > 0,
+        available: currentPrice > 0,
         link: `https://amazon.co.uk/dp/${p.asin}`
       };
     })
-    .filter(d => d.available && d.discount >= 30)  // 30%+ off
+    .filter(d => d.available && d.discount > 50)  // Only >50% off
     .slice(0, 5);
     
     console.log(`✅ Found ${deals.length} valid deals >50% off`);
@@ -234,7 +231,7 @@ const server = http.createServer(async (req, res) => {
         domainId: 2,
         priceTypes: [0],
         dateRange: 1,
-        deltaPercentRange: [30, 100],
+        deltaPercentRange: [50, 100],
         isFilterEnabled: true
       };
 
