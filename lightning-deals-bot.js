@@ -4,9 +4,9 @@ const http = require('http');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const AMAZON_ASSOCIATES_ID = process.env.AMAZON_ASSOCIATES_ID || 'pricedropuk0c-21';
-const MIN_PRICE = 100;  // Only items $100+
-const MIN_DISCOUNT = 30; // At least 30% off
-const MAX_DISCOUNT = 90; // At most 90% off
+const MIN_PRICE = 50;  // Lowered to $50 to test
+const MIN_DISCOUNT = 10; // Lowered to 10% to test
+const MAX_DISCOUNT = 90;
 
 if (!DISCORD_WEBHOOK_URL) {
   console.error('Missing DISCORD_WEBHOOK_URL');
