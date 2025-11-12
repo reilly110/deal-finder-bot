@@ -27,31 +27,24 @@ async function fetchDealsFromKeepa() {
     // Build the queryJSON according to Keepa API documentation
     const queryJSON = {
       page: 0,                           // Start at page 0
-      domainId: 2,                       // UK Amazon
-      priceTypes: [0],                   // AMAZON price type
-      dateRange: 0,                      // Last 24 hours
-      deltaPercentRange: [70, 100],      // 70-100% price drop (deals)
-      currentRange: [100, 500000],       // Price range: £1 - £5000 (in pence)
-      isFilterEnabled: true,             // Enable filters
-      minRating: 30,                     // Minimum 3 stars
-      sortType: 0,                       // Default sort
-      isLowest: false,                   // Not strictly lowest ever
-      mustHaveAmazonOffer: true          // Must have Amazon offer
+      domainId: 2,                       // UK Amazon - REQUIRED
+      priceTypes: [0],                   // AMAZON price type - REQUIRED
+      dateRange: 0                       // Last 24 hours
     };
 
     console.log('📤 Sending POST request to Keepa API...');
     console.log('Query:', JSON.stringify(queryJSON, null, 2));
 
-    const response = await fetch(keepaUrl, {
+    // Build URL with key in query string (not in body)
+    const urlWithKey = `${keepaUrl}?key=${KEEPA_API_KEY}`;
+
+    const response = await fetch(urlWithKey, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        key: KEEPA_API_KEY,
-        ...queryJSON
-      })
+      body: JSON.stringify(queryJSON)
     });
 
     const responseData = await response.json();
