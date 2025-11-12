@@ -69,13 +69,18 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    // Debug: log what fields exist in response
-    console.log('Response keys:', Object.keys(responseData).slice(0, 10));
-
-    // Check if we got products - they might be directly in the response or in a different field
-    let products = responseData.deals || responseData.products || responseData.data || Object.values(responseData).find(item => Array.isArray(item) && item.length > 0);
+    console.log('DEBUG: Checking for deals...');
+    console.log('DEBUG: responseData.deals:', responseData.deals);
+    console.log('DEBUG: responseData.deals is array?', Array.isArray(responseData.deals));
     
-    console.log('Products found via:', responseData.products ? 'responseData.products' : responseData.data ? 'responseData.data' : 'Object.values search');
+    // Check if we got products - deals is the correct field
+    let products = responseData.deals;
+    
+    if (!Array.isArray(products)) {
+      products = responseData.products || responseData.data || [];
+    }
+    
+    console.log('Products found via:', responseData.deals ? 'responseData.deals' : 'fallback');
     console.log('Products array length:', products ? products.length : 0);
     
     if (!products || products.length === 0) {
