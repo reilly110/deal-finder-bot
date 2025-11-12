@@ -1,4 +1,3 @@
-const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 const cron = require('node-cron');
 const http = require('http');

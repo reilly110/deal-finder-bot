@@ -17,7 +17,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-fetch": "^2.7.0",
     "node-cron": "^3.0.2",
     "cheerio": "^1.0.0-rc.12"
   },
