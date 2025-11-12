@@ -18,10 +18,10 @@ async function fetchDealsFromKeepa() {
     const keepaUrl = 'https://api.keepa.com/deal';
     const queryJSON = {
       page: 0,
-      domainId: 2,
+      domainId: 1,
       priceTypes: [0],
-      dateRange: 1,  // Last 7 days instead of 24 hours
-      deltaPercentRange: [50, 100],  // 50%+ off
+      dateRange: 1,
+      deltaPercentRange: [50, 100],
       isFilterEnabled: true
     };
 
@@ -87,7 +87,7 @@ async function fetchDealsFromKeepa() {
         avgPrice: (avgPrice / 100).toFixed(2),
         discount: discount,
         available: currentPrice > 0,
-        link: `https://amazon.co.uk/dp/${p.asin}`
+        link: `https://amazon.com/dp/${p.asin}`
       };
     })
     .filter(d => d.available && d.discount > 50)  // Only >50% off
@@ -182,7 +182,7 @@ async function postToDiscord(deals) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `🚨 **MEGA DEALS ALERT** 🚨\n🔥 **${deals.length} Amazon UK deals >50% OFF** 🔥\n_Last updated: ${new Date().toLocaleString()}_\n\n⬇️ Copy & Paste Ready 👇`,
+        content: `🚨 **MEGA DEALS ALERT** 🚨\n🔥 **${deals.length} Amazon.com deals >50% OFF** 🔥\n_Last updated: ${new Date().toLocaleString()}_\n\n⬇️ Copy & Paste Ready 👇`,
         embeds: embeds,
         username: 'Deal Finder Bot',
         avatar_url: 'https://cdn-icons-png.flaticon.com/512/2721/2721215.png'
@@ -228,7 +228,7 @@ const server = http.createServer(async (req, res) => {
       const keepaUrl = 'https://api.keepa.com/deal';
       const queryJSON = {
         page: 0,
-        domainId: 2,
+        domainId: 1,
         priceTypes: [0],
         dateRange: 1,
         deltaPercentRange: [50, 100],
