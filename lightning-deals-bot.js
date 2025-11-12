@@ -17,14 +17,18 @@ async function scrapeDeals() {
   try {
     console.log('🔍 Fetching CamelCamelCamel deals RSS feed...');
     
-    // Add user-agent to bypass blocking
+    // Add realistic browser headers to bypass blocking
     const customParser = new Parser({
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/html;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://camelcamelcamel.com/'
       }
     });
     
-    const feed = await customParser.parseURL('https://camelcamelcamel.com/popular?deal=1&rss=1');
+    const feed = await customParser.parseURL('https://camelcamelcamel.com/popular?deal=1');
     
     console.log(`📰 Got ${feed.items.length} items from RSS feed`);
     
