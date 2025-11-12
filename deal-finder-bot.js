@@ -74,10 +74,10 @@ async function fetchDealsFromKeepa() {
       const currentPrice = p.current && p.current[0] ? p.current[0] : 0;
       const avgPrice = p.avg && p.avg[0] ? p.avg[0] : currentPrice;
       
-      // Calculate discount percentage from prices
+      // Use Keepa's calculated discount from delta field
       let discount = 0;
-      if (avgPrice > 0 && currentPrice > 0) {
-        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
+      if (Array.isArray(p.delta) && p.delta.length > 0 && Array.isArray(p.delta[0])) {
+        discount = Math.abs(p.delta[0][0]);
       }
       
       return {
@@ -88,7 +88,7 @@ async function fetchDealsFromKeepa() {
         discount: discount,
         link: `https://amazon.co.uk/dp/${p.asin}`
       };
-    }).filter(d => d.discount > 50);  // Filter >50% off
+    }).filter(d => d.discount > 50);  // >50% off
     
     console.log(`✅ Found ${deals.length} deals >50% off`);
     return deals;
