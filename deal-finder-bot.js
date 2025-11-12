@@ -43,7 +43,7 @@ async function fetchDealsFromKeepa() {
     let products = [];
     
     if (data.deals && typeof data.deals === 'object') {
-      // Look for products array inside deals object
+      console.log('Keys in deals:', Object.keys(data.deals).slice(0, 20));
       if (Array.isArray(data.deals.products)) {
         products = data.deals.products;
         console.log(`Found products in deals.products: ${products.length}`);
