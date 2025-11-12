@@ -70,14 +70,14 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    const deals = products.slice(0, 5).map(p => ({
+    const deals = products.slice(0, 10).map(p => ({
       asin: p.asin,
       title: p.title || 'Product',
       currentPrice: p.current ? (p.current[0] / 100).toFixed(2) : 'N/A',
       avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
-      discount: Math.abs(p.delta || 0),
+      discount: Math.abs(p.delta && p.delta[0] ? p.delta[0] : 0),
       link: `https://amazon.co.uk/dp/${p.asin}`
-    }));
+    })).filter(d => d.discount > 50);  // ONLY >50% off
 
     console.log(`✅ Found ${deals.length} deals`);
     return deals;
@@ -111,9 +111,10 @@ async function postToDiscord(deals) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        content: `🎉 Found ${deals.length} deals!`,
+        content: `🚨 **MEGA DEALS ALERT** 🚨\n🔥 **${deals.length} Amazon UK deals >50% OFF** 🔥\n_Last updated: ${new Date().toLocaleString()}_\n\n⬇️ Copy & Paste Ready 👇`,
         embeds: embeds,
-        username: 'Deal Finder Bot'
+        username: 'Deal Finder Bot',
+        avatar_url: 'https://cdn-icons-png.flaticon.com/512/2721/2721215.png'
       })
     });
 
