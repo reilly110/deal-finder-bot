@@ -161,10 +161,8 @@ const server = http.createServer(async (req, res) => {
       
       res.writeHead(200);
       res.end(JSON.stringify({
-        responseKeys: Object.keys(data),
-        deals: typeof data.deals,
-        dealsIsArray: Array.isArray(data.deals),
-        sample: JSON.stringify(data.deals).substring(0, 200)
+        allKeys: Object.keys(data),
+        fullResponse: data
       }, null, 2));
     } catch (error) {
       res.writeHead(500);
