@@ -70,9 +70,9 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    const deals = products.slice(0, 10).map(p => {
-      console.log('DEBUG delta:', p.delta, 'type:', typeof p.delta);
-      const discount = Math.abs(p.delta && p.delta[0] ? p.delta[0] : 0);
+    const deals = products.slice(0, 3).map(p => {
+      console.log('DEBUG delta:', JSON.stringify(p.delta).substring(0, 200));
+      const discount = p.delta ? Object.values(p.delta)[0] : 0;
       return {
         asin: p.asin,
         title: p.title || 'Product',
