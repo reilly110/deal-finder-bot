@@ -74,8 +74,12 @@ async function fetchDealsFromKeepa() {
     // Check if we got products - they might be directly in the response or in a different field
     let products = responseData.products || responseData.data || Object.values(responseData).find(item => Array.isArray(item) && item.length > 0);
     
+    console.log('Products found via:', responseData.products ? 'responseData.products' : responseData.data ? 'responseData.data' : 'Object.values search');
+    console.log('Products array length:', products ? products.length : 0);
+    
     if (!products || products.length === 0) {
       console.log('ℹ️  No deals found matching criteria');
+      console.log('Full response keys:', Object.keys(responseData));
       return [];
     }
 
@@ -234,6 +238,11 @@ const server = http.createServer((req, res) => {
   if (req.url === '/health' || req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'Deal Finder Bot is running', timestamp: new Date().toISOString() }));
+  } else if (req.url === '/trigger') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'Triggering bot manually...', timestamp: new Date().toISOString() }));
+    // Run bot immediately
+    runBot();
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
@@ -243,6 +252,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`📡 HTTP server listening on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Manual trigger: http://localhost:${PORT}/trigger`);
 });
 
 // Graceful shutdown
