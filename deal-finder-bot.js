@@ -70,14 +70,14 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    const deals = products.slice(0, 10).map(p => {
+    const deals = products.slice(0, 20).map(p => {
       const currentPrice = p.current && p.current[0] ? p.current[0] : 0;
-      const avgPrice = p.avg && p.avg[0] ? p.avg[0] : currentPrice;
+      const avgPrice = p.avg && p.avg[0] ? p.avg[0] : 0;
       
-      // Use Keepa's calculated discount from delta field
+      // Calculate real discount from prices
       let discount = 0;
-      if (Array.isArray(p.delta) && p.delta.length > 0 && Array.isArray(p.delta[0])) {
-        discount = Math.abs(p.delta[0][0]);
+      if (avgPrice > 0 && currentPrice > 0 && currentPrice < avgPrice) {
+        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
       }
       
       return {
@@ -86,17 +86,58 @@ async function fetchDealsFromKeepa() {
         currentPrice: (currentPrice / 100).toFixed(2),
         avgPrice: (avgPrice / 100).toFixed(2),
         discount: discount,
+        available: currentPrice > 0,  // Mark if available
         link: `https://amazon.co.uk/dp/${p.asin}`
       };
-    }).filter(d => d.discount > 50);  // >50% off
+    })
+    .filter(d => d.available && d.discount > 50)  // Only available items with >50% off
+    .slice(0, 5);  // Top 5
     
-    console.log(`✅ Found ${deals.length} deals >50% off`);
+    console.log(`✅ Found ${deals.length} valid deals >50% off`);
     return deals;
 
   } catch (error) {
     console.error('Error:', error.message);
     return [];
   }
+}
+
+async function getProductCoupons(asin) {
+  try {
+    const keepaUrl = 'https://api.keepa.com/product';
+    const params = new URLSearchParams({
+      key: KEEPA_API_KEY,
+      domain: 2,  // UK
+      asin: asin,
+      offers: 20  // Get offer details including coupons
+    });
+
+    const response = await fetch(`${keepaUrl}?${params.toString()}`);
+    const data = await response.json();
+
+    if (data.products && data.products.length > 0) {
+      const product = data.products[0];
+      let couponText = '';
+
+      // Check marketplace offers for coupons
+      if (product.offers && Array.isArray(product.offers)) {
+        product.offers.forEach(offer => {
+          if (offer.coupon !== undefined) {
+            if (offer.coupon < 0) {
+              couponText += `💰 ${Math.abs(offer.coupon)}% coupon\n`;
+            } else if (offer.coupon > 0) {
+              couponText += `💰 £${(offer.coupon/100).toFixed(2)} coupon\n`;
+            }
+          }
+        });
+      }
+
+      return couponText.trim() || null;
+    }
+  } catch (error) {
+    console.error(`Error fetching coupons for ${asin}:`, error.message);
+  }
+  return null;
 }
 
 async function postToDiscord(deals) {
@@ -106,17 +147,36 @@ async function postToDiscord(deals) {
   }
 
   try {
-    const embeds = deals.map(d => ({
-      title: `🔥 ${d.title.substring(0, 80)}`,
-      description: `**${d.discount}% OFF** - £${d.currentPrice}`,
-      fields: [
+    // Fetch coupons for each deal
+    console.log('Fetching coupon details...');
+    const dealsWithCoupons = await Promise.all(
+      deals.map(async (d) => {
+        const couponInfo = await getProductCoupons(d.asin);
+        return { ...d, couponInfo };
+      })
+    );
+
+    const embeds = dealsWithCoupons.map(d => {
+      const fields = [
         { name: 'Was', value: `£${d.avgPrice}`, inline: true },
         { name: 'Now', value: `£${d.currentPrice}`, inline: true },
-        { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! £${d.currentPrice} #AmazonDeals`, inline: false },
-        { name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
-      ],
-      color: 16711680
-    }));
+        { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! £${d.currentPrice} #AmazonDeals`, inline: false }
+      ];
+
+      // Add coupon field if available
+      if (d.couponInfo) {
+        fields.push({ name: '🎟️ Available Coupons', value: d.couponInfo, inline: false });
+      }
+
+      fields.push({ name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false });
+
+      return {
+        title: `🔥 ${d.title.substring(0, 80)}`,
+        description: `**${d.discount}% OFF** - £${d.currentPrice}`,
+        fields: fields,
+        color: 16711680
+      };
+    });
 
     const response = await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
