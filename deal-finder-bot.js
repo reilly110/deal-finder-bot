@@ -70,25 +70,28 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    const deals = products.slice(0, 3).map(p => {
-      console.log('DEBUG delta:', JSON.stringify(p.delta).substring(0, 200));
-      const discount = p.delta ? Object.values(p.delta)[0] : 0;
+    const deals = products.slice(0, 10).map(p => {
+      const currentPrice = p.current && p.current[0] ? p.current[0] : 0;
+      const avgPrice = p.avg && p.avg[0] ? p.avg[0] : currentPrice;
+      
+      // Calculate discount percentage from prices
+      let discount = 0;
+      if (avgPrice > 0 && currentPrice > 0) {
+        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
+      }
+      
       return {
         asin: p.asin,
         title: p.title || 'Product',
-        currentPrice: p.current ? (p.current[0] / 100).toFixed(2) : 'N/A',
-        avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
+        currentPrice: (currentPrice / 100).toFixed(2),
+        avgPrice: (avgPrice / 100).toFixed(2),
         discount: discount,
         link: `https://amazon.co.uk/dp/${p.asin}`
       };
-    });
+    }).filter(d => d.discount > 50);  // Filter >50% off
     
-    console.log('Top 5 discounts found:', deals.slice(0, 5).map(d => `${d.discount}% - ${d.title.substring(0, 40)}`));
-    
-    const filtered = deals.filter(d => d.discount > 50);
-    console.log(`✅ Found ${filtered.length} deals >50% off`);
-    
-    return filtered;
+    console.log(`✅ Found ${deals.length} deals >50% off`);
+    return deals;
 
   } catch (error) {
     console.error('Error:', error.message);
