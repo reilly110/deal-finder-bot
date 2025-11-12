@@ -21,7 +21,7 @@ async function fetchDealsFromKeepa() {
       domainId: 1,
       priceTypes: [0],
       dateRange: 1,
-      deltaPercentRange: [20, 100],  // Get any deals
+      deltaPercentRange: [1, 100],  // Capture everything
       isFilterEnabled: true
     };
 
@@ -64,19 +64,16 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    console.log(`Found ${products.length} products`);
-    
-    // Calculate discount for each product from /deal response data
-    const deals = products.map(p => {
+    // Calculate discount for each product
+    const allDeals = products.map(p => {
       const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
       const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
       
+      // USE KEEPA'S DELTA DISCOUNT DIRECTLY
       let discount = 0;
-      if (currentPrice > 0 && avgPrice > currentPrice) {
-        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
+      if (Array.isArray(p.delta) && Array.isArray(p.delta[0]) && p.delta[0][0] !== undefined) {
+        discount = Math.abs(p.delta[0][0]);  // This is Keepa's calculated percentage
       }
-      
-      console.log(`${p.title?.substring(0, 40)} | ${discount}% | $${(currentPrice/100).toFixed(2)}`);
       
       return {
         asin: p.asin,
@@ -86,9 +83,14 @@ async function fetchDealsFromKeepa() {
         discount: discount,
         link: `https://amazon.com/dp/${p.asin}`
       };
-    })
-    .filter(d => d.discount > 50)  // STRICT: Only >50%
-    .slice(0, 5);
+    });
+    
+    // Log stats
+    const maxDiscount = Math.max(...allDeals.map(d => d.discount));
+    console.log(`Max discount found: ${maxDiscount}%`);
+    
+    // Filter for >50%
+    const deals = allDeals.filter(d => d.discount > 50).slice(0, 5);
 
     console.log(`✅ Found ${deals.length} verified deals >50% off`);
     return deals;
