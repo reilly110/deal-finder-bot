@@ -11,10 +11,9 @@ if (!KEEPA_API_KEY || !DISCORD_WEBHOOK_URL) {
   process.exit(1);
 }
 
-// Get ASINs from /deal endpoint
-async function getDealsASINs() {
+async function fetchDealsFromKeepa() {
   try {
-    console.log('📋 Getting deal ASINs from Keepa...');
+    console.log('🔍 Fetching deals...');
     
     const keepaUrl = 'https://api.keepa.com/deal';
     const queryJSON = {
@@ -22,7 +21,7 @@ async function getDealsASINs() {
       domainId: 1,
       priceTypes: [0],
       dateRange: 1,
-      deltaPercentRange: [50, 100],
+      deltaPercentRange: [20, 100],  // Get any deals
       isFilterEnabled: true
     };
 
@@ -36,122 +35,66 @@ async function getDealsASINs() {
     const data = await response.json();
     console.log(`Tokens left: ${data.tokensLeft}`);
 
-    if (!data.products || data.products.length === 0) {
-      console.log('No deals found');
-      return [];
-    }
-
-    // Extract ASINs from products
-    const asins = data.products.map(p => p.asin).slice(0, 5);
-    console.log(`Found ${asins.length} deal ASINs: ${asins.join(', ')}`);
-    return asins;
-
-  } catch (error) {
-    console.error('Error getting ASINs:', error.message);
-    return [];
-  }
-}
-
-// Get detailed product info including prices
-async function getProductDetails(asin) {
-  try {
-    const keepaUrl = 'https://api.keepa.com/product';
-    const params = new URLSearchParams({
-      key: KEEPA_API_KEY,
-      domain: 1,
-      asin: asin,
-      stats: 1
-    });
-
-    const response = await fetch(`${keepaUrl}?${params.toString()}`);
-    const data = await response.json();
-
-    if (!data.products || data.products.length === 0) {
-      return null;
-    }
-
-    const product = data.products[0];
-    
-    // Extract price data from stats
-    let currentPrice = 0;
-    let avgPrice = 0;
-    
-    if (product.stats && Array.isArray(product.stats)) {
-      // stats[0] is typically the buy box price stats
-      const buyBoxStats = product.stats[0];
-      if (Array.isArray(buyBoxStats) && buyBoxStats.length > 0) {
-        currentPrice = buyBoxStats[0] || 0;  // First element is current price
-        
-        // Average is usually found by analyzing the array
-        // For now use current as fallback
-        if (buyBoxStats.length > 10) {
-          avgPrice = buyBoxStats[1] || currentPrice;
-        } else {
-          avgPrice = currentPrice;
+    // Recursively find products array
+    function findProductsArray(obj, depth = 0) {
+      if (depth > 5) return [];
+      if (!obj) return [];
+      
+      if (Array.isArray(obj)) {
+        if (obj.length > 0 && obj[0].asin && obj[0].current && obj[0].avg) {
+          return obj;
+        }
+        for (let item of obj) {
+          const found = findProductsArray(item, depth + 1);
+          if (found.length > 0) return found;
+        }
+      } else if (typeof obj === 'object') {
+        for (let key in obj) {
+          const found = findProductsArray(obj[key], depth + 1);
+          if (found.length > 0) return found;
         }
       }
-    }
-
-    // Fallback: try direct price fields if available
-    if (currentPrice === 0 && product.current) {
-      currentPrice = Array.isArray(product.current) ? product.current[0] : product.current;
-    }
-    if (avgPrice === 0 && product.avg) {
-      avgPrice = Array.isArray(product.avg) ? 
-        (Array.isArray(product.avg[0]) ? product.avg[0][0] : product.avg[0]) : 
-        product.avg;
-    }
-
-    // Calculate discount
-    let discount = 0;
-    if (currentPrice > 0 && avgPrice > currentPrice) {
-      discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
-    }
-
-    console.log(`${product.title?.substring(0, 40)} | Discount: ${discount}% | Current: $${(currentPrice/100).toFixed(2)} | Avg: $${(avgPrice/100).toFixed(2)}`);
-
-    return {
-      asin: asin,
-      title: product.title || 'Product',
-      currentPrice: (currentPrice / 100).toFixed(2),
-      avgPrice: (avgPrice / 100).toFixed(2),
-      discount: discount,
-      link: `https://amazon.com/dp/${asin}`
-    };
-
-  } catch (error) {
-    console.error(`Error getting details for ${asin}:`, error.message);
-    return null;
-  }
-}
-
-async function fetchDealsFromKeepa() {
-  try {
-    console.log('🔍 Fetching deals...');
-    
-    // Step 1: Get ASINs from /deal endpoint
-    const asins = await getDealsASINs();
-    
-    if (asins.length === 0) {
       return [];
     }
 
-    // Step 2: Get details for each ASIN using /product endpoint
-    console.log('📊 Verifying prices with /product endpoint...');
-    const deals = [];
+    const products = findProductsArray(data);
     
-    for (const asin of asins) {
-      const details = await getProductDetails(asin);
-      if (details && details.discount > 50) {
-        deals.push(details);
-      }
+    if (!products || products.length === 0) {
+      console.log('No products found');
+      return [];
     }
+
+    console.log(`Found ${products.length} products`);
+    
+    // Calculate discount for each product from /deal response data
+    const deals = products.map(p => {
+      const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
+      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
+      
+      let discount = 0;
+      if (currentPrice > 0 && avgPrice > currentPrice) {
+        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
+      }
+      
+      console.log(`${p.title?.substring(0, 40)} | ${discount}% | $${(currentPrice/100).toFixed(2)}`);
+      
+      return {
+        asin: p.asin,
+        title: p.title || 'Product',
+        currentPrice: (currentPrice / 100).toFixed(2),
+        avgPrice: (avgPrice / 100).toFixed(2),
+        discount: discount,
+        link: `https://amazon.com/dp/${p.asin}`
+      };
+    })
+    .filter(d => d.discount > 50)  // STRICT: Only >50%
+    .slice(0, 5);
 
     console.log(`✅ Found ${deals.length} verified deals >50% off`);
     return deals;
 
   } catch (error) {
-    console.error('Error fetching deals:', error.message);
+    console.error('Error:', error.message);
     return [];
   }
 }
