@@ -39,16 +39,27 @@ async function fetchDealsFromKeepa() {
     console.log('deals field exists:', !!data.deals);
     console.log('deals is array:', Array.isArray(data.deals));
     
-    // deals is NOT an array, it's metadata. Look for products array
+    // deals is an object, products are nested inside it
     let products = [];
     
-    // Try to find an array of products
-    for (const key in data) {
-      if (Array.isArray(data[key]) && data[key].length > 0) {
-        if (typeof data[key][0] === 'object' && data[key][0].asin) {
-          products = data[key];
-          console.log(`Found products in field: ${key} (${products.length} items)`);
-          break;
+    if (data.deals && typeof data.deals === 'object') {
+      // Look for products array inside deals object
+      if (Array.isArray(data.deals.products)) {
+        products = data.deals.products;
+        console.log(`Found products in deals.products: ${products.length}`);
+      } else if (data.deals.asins && Array.isArray(data.deals.asins)) {
+        products = data.deals.asins;
+        console.log(`Found products in deals.asins: ${products.length}`);
+      } else {
+        // Find any array with product objects (has asin, title)
+        for (const key in data.deals) {
+          if (Array.isArray(data.deals[key]) && data.deals[key].length > 0) {
+            if (data.deals[key][0] && data.deals[key][0].asin) {
+              products = data.deals[key];
+              console.log(`Found products in deals.${key}: ${products.length}`);
+              break;
+            }
+          }
         }
       }
     }
