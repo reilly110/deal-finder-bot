@@ -72,12 +72,12 @@ async function fetchDealsFromKeepa() {
 
     const deals = products.slice(0, 20).map(p => {
       const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
-      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : currentPrice;
+      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
       
-      // Use Keepa's calculated discount from delta[0][0]
+      // Calculate discount from actual prices - this is DEFINITIVE
       let discount = 0;
-      if (Array.isArray(p.delta) && Array.isArray(p.delta[0]) && p.delta[0][0]) {
-        discount = Math.abs(p.delta[0][0]);
+      if (currentPrice > 0 && avgPrice > currentPrice) {
+        discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
       }
       
       return {
@@ -90,7 +90,7 @@ async function fetchDealsFromKeepa() {
         link: `https://amazon.com/dp/${p.asin}`
       };
     })
-    .filter(d => d.available && d.discount > 50)  // Only >50% off
+    .filter(d => d.available && d.discount > 50)  // Strict: ONLY >50%
     .slice(0, 5);
     
     console.log(`✅ Found ${deals.length} valid deals >50% off`);
