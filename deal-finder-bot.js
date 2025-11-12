@@ -19,6 +19,7 @@ if (!DISCORD_WEBHOOK_URL) {
 
 // Function to fetch deals from Keepa Browsing Deals API
 async function fetchDealsFromKeepa() {
+  console.log('DEBUG: fetchDealsFromKeepa() called');
   try {
     console.log('🔍 Querying Keepa for deals...');
     
@@ -53,7 +54,7 @@ async function fetchDealsFromKeepa() {
     const responseData = await response.json();
 
     console.log(`API Response Status: ${response.status}`);
-    console.log('Full Response:', JSON.stringify(responseData, null, 2));
+    console.log('DEBUG: Response received, parsing...');
 
     if (!response.ok) {
       console.error(`Keepa API error: ${response.status} ${response.statusText}`);
@@ -126,6 +127,7 @@ async function fetchDealsFromKeepa() {
 
 // Function to post to Discord
 async function postToDiscord(deals) {
+  console.log('DEBUG: postToDiscord() called with', deals.length, 'deals');
   if (deals.length === 0) {
     console.log('ℹ️  No deals to post to Discord');
     return;
@@ -203,12 +205,18 @@ async function postToDiscord(deals) {
 
 // Main function to run the bot
 async function runBot() {
+  console.log('DEBUG: runBot() started');
   console.log(`\n${'='.repeat(60)}`);
   console.log(`⏰ [${new Date().toLocaleString()}] Running deal search...`);
   console.log(`${'='.repeat(60)}`);
   
+  console.log('DEBUG: Calling fetchDealsFromKeepa()');
   const deals = await fetchDealsFromKeepa();
+  console.log('DEBUG: Got deals back:', deals.length);
+  
+  console.log('DEBUG: Calling postToDiscord()');
   await postToDiscord(deals);
+  console.log('DEBUG: postToDiscord() complete');
   
   console.log(`${'='.repeat(60)}\n`);
 }
@@ -239,10 +247,13 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'Deal Finder Bot is running', timestamp: new Date().toISOString() }));
   } else if (req.url === '/trigger') {
+    console.log('DEBUG: /trigger endpoint called at', new Date().toLocaleString());
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'Triggering bot manually...', timestamp: new Date().toISOString() }));
     // Run bot immediately
-    runBot();
+    console.log('DEBUG: About to call runBot()');
+    runBot().catch(err => console.error('DEBUG: Error in runBot():', err));
+    console.log('DEBUG: runBot() called');
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
