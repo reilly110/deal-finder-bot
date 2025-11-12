@@ -67,19 +67,29 @@ async function fetchDealsFromKeepa() {
     // Calculate discount for each product
     const allDeals = products.map(p => {
       const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
-      const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
       
-      // USE deltaPercent[0][0] - KEEPA'S CURRENT DISCOUNT PERCENTAGE
+      // Find the HIGHEST average price from historical data
+      let highestAvg = currentPrice;
+      if (Array.isArray(p.avg) && p.avg.length > 0) {
+        // avg is array of arrays - [0] is most recent, get first element of each
+        for (let avgArray of p.avg) {
+          if (Array.isArray(avgArray) && avgArray[0] && avgArray[0] > highestAvg) {
+            highestAvg = avgArray[0];
+          }
+        }
+      }
+      
+      // Calculate TRUE discount
       let discount = 0;
-      if (Array.isArray(p.deltaPercent) && Array.isArray(p.deltaPercent[0])) {
-        discount = Math.abs(p.deltaPercent[0][0]);
+      if (currentPrice > 0 && highestAvg > currentPrice) {
+        discount = Math.round(((highestAvg - currentPrice) / highestAvg) * 100);
       }
       
       return {
         asin: p.asin,
         title: p.title || 'Product',
         currentPrice: (currentPrice / 100).toFixed(2),
-        avgPrice: (avgPrice / 100).toFixed(2),
+        avgPrice: (highestAvg / 100).toFixed(2),
         discount: discount,
         link: `https://amazon.com/dp/${p.asin}`
       };
