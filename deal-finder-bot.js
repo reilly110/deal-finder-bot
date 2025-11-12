@@ -1,5 +1,6 @@
 const fetch = require('node-fetch');
 const cron = require('node-cron');
+const http = require('http');
 
 // Environment variables
 const KEEPA_API_KEY = process.env.KEEPA_API_KEY;
@@ -227,8 +228,26 @@ cron.schedule('0 */6 * * *', () => {
 console.log('✅ Bot is running. Deals will be fetched every 6 hours.');
 console.log('⏸️  Press Ctrl+C to stop.\n');
 
+// Create HTTP server to satisfy Render's port requirement
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'Deal Finder Bot is running', timestamp: new Date().toISOString() }));
+  } else {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`📡 HTTP server listening on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+});
+
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n👋 Bot shutting down gracefully...');
+  server.close();
   process.exit(0);
 });
