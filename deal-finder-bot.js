@@ -30,7 +30,7 @@ async function fetchDealsFromKeepa() {
       domainId: 2,                       // UK Amazon - REQUIRED
       priceTypes: [0],                   // AMAZON price type - REQUIRED
       dateRange: 0,                      // Last 24 hours
-      deltaPercentRange: [70, 100],      // 70-100% price drop (deals) - THIS FINDS DEALS
+      deltaPercentRange: [50, 100],      // 70-100% price drop (deals) - THIS FINDS DEALS
       isFilterEnabled: true              // Enable filters
     };
 
