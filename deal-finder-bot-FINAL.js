@@ -1,0 +1,233 @@
+const fetch = require('node-fetch');
+const cron = require('node-cron');
+
+// Environment variables
+const KEEPA_API_KEY = process.env.KEEPA_API_KEY;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const AMAZON_ASSOCIATES_ID = process.env.AMAZON_ASSOCIATES_ID || 'pricedropuk0c-21';
+
+if (!KEEPA_API_KEY) {
+  console.error('ERROR: KEEPA_API_KEY not set in environment variables');
+  process.exit(1);
+}
+
+if (!DISCORD_WEBHOOK_URL) {
+  console.error('ERROR: DISCORD_WEBHOOK_URL not set in environment variables');
+  process.exit(1);
+}
+
+// Function to fetch deals from Keepa Browsing Deals API
+async function fetchDealsFromKeepa() {
+  try {
+    console.log('🔍 Querying Keepa for deals...');
+    
+    // Keepa Browsing Deals endpoint
+    const keepaUrl = 'https://api.keepa.com/deal';
+    
+    // Build the queryJSON according to Keepa API documentation
+    const queryJSON = {
+      page: 0,                           // Start at page 0
+      domainId: 2,                       // UK Amazon
+      priceTypes: [0],                   // AMAZON price type
+      dateRange: 0,                      // Last 24 hours
+      deltaPercentRange: [70, 100],      // 70-100% price drop (deals)
+      currentRange: [100, 500000],       // Price range: £1 - £5000 (in pence)
+      isFilterEnabled: true,             // Enable filters
+      minRating: 30,                     // Minimum 3 stars
+      sortType: 0,                       // Default sort
+      isLowest: false,                   // Not strictly lowest ever
+      mustHaveAmazonOffer: true          // Must have Amazon offer
+    };
+
+    console.log('📤 Sending POST request to Keepa API...');
+    console.log('Query:', JSON.stringify(queryJSON, null, 2));
+
+    const response = await fetch(keepaUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        key: KEEPA_API_KEY,
+        ...queryJSON
+      })
+    });
+
+    const responseData = await response.json();
+
+    console.log(`API Response Status: ${response.status}`);
+
+    if (!response.ok) {
+      console.error(`Keepa API error: ${response.status} ${response.statusText}`);
+      console.error('Response:', JSON.stringify(responseData, null, 2));
+      return [];
+    }
+
+    // Check for API errors in response
+    if (responseData.error) {
+      console.error('❌ Keepa API Error:', responseData.error.message);
+      console.error('Details:', responseData.error.details);
+      return [];
+    }
+
+    // Check if we got products
+    if (!responseData.products || responseData.products.length === 0) {
+      console.log('ℹ️  No deals found matching criteria');
+      return [];
+    }
+
+    console.log(`✅ Got ${responseData.products.length} deals from Keepa`);
+
+    // Process products into formatted deals
+    const deals = responseData.products
+      .map(product => {
+        // Extract prices - Keepa stores prices as integers (pence for UK)
+        const currentPrice = product.current && product.current.length > 0
+          ? (product.current[0] / 100).toFixed(2)
+          : 'N/A';
+        
+        // Get average price (for comparison)
+        const avgPrice = product.avg && product.avg.length > 0
+          ? (product.avg[0] / 100).toFixed(2)
+          : currentPrice;
+
+        return {
+          asin: product.asin || 'N/A',
+          title: product.title || 'Product',
+          currentPrice: currentPrice,
+          avgPrice: avgPrice,
+          discount: Math.abs(product.delta || 0), // Delta is the percentage discount
+          rating: product.rating ? product.rating / 10 : 0, // Keepa stores as 0-50
+          reviews: product.reviews || 0,
+          link: `https://amazon.co.uk/dp/${product.asin}`
+        };
+      })
+      .sort((a, b) => b.discount - a.discount) // Sort by highest discount first
+      .slice(0, 5); // Top 5 deals
+
+    console.log(`✅ Formatted ${deals.length} deals for Discord`);
+    return deals;
+    
+  } catch (error) {
+    console.error('❌ Error fetching from Keepa:', error.message);
+    if (error.stack) {
+      console.error('Stack:', error.stack);
+    }
+    return [];
+  }
+}
+
+// Function to post to Discord
+async function postToDiscord(deals) {
+  if (deals.length === 0) {
+    console.log('ℹ️  No deals to post to Discord');
+    return;
+  }
+
+  try {
+    console.log(`📤 Posting ${deals.length} deals to Discord...`);
+
+    // Create embed messages for Discord
+    const embeds = deals.map(deal => ({
+      title: `🔥 ${deal.title.substring(0, 100)}${deal.title.length > 100 ? '...' : ''}`,
+      description: `**${deal.discount}% OFF** 💰`,
+      fields: [
+        {
+          name: '💷 Current Price',
+          value: `£${deal.currentPrice}`,
+          inline: true
+        },
+        {
+          name: 'Average Price',
+          value: `£${deal.avgPrice}`,
+          inline: true
+        },
+        {
+          name: '📊 Discount',
+          value: `${deal.discount}%`,
+          inline: true
+        },
+        {
+          name: '⭐ Rating',
+          value: `${(deal.rating).toFixed(1)}/5 (${deal.reviews} reviews)`,
+          inline: true
+        },
+        {
+          name: '🔗 Buy Now',
+          value: `[View on Amazon](${deal.link}?tag=${AMAZON_ASSOCIATES_ID})`,
+          inline: false
+        }
+      ],
+      color: 16711680, // Red color for hot deals
+      footer: {
+        text: 'Deal Finder Bot | Amazon UK | Keepa API'
+      },
+      timestamp: new Date().toISOString()
+    }));
+
+    const payload = {
+      content: `🎉 **Found ${deals.length} Hot Amazon Deals!** 🔥\n_70%+ discounts from the last 24 hours_`,
+      embeds: embeds,
+      username: 'Deal Finder Bot',
+      avatar_url: 'https://cdn-icons-png.flaticon.com/512/2721/2721215.png'
+    };
+
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Discord webhook error: ${response.status} - ${errorBody}`);
+    }
+
+    console.log(`✅ Successfully posted ${deals.length} deals to Discord`);
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Error posting to Discord:', error.message);
+    return false;
+  }
+}
+
+// Main function to run the bot
+async function runBot() {
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`⏰ [${new Date().toLocaleString()}] Running deal search...`);
+  console.log(`${'='.repeat(60)}`);
+  
+  const deals = await fetchDealsFromKeepa();
+  await postToDiscord(deals);
+  
+  console.log(`${'='.repeat(60)}\n`);
+}
+
+// Start the bot
+console.log('🤖 Deal Finder Bot Starting...');
+console.log('📡 Environment:', {
+  keepa_api_key: KEEPA_API_KEY ? '✅ Set' : '❌ Missing',
+  discord_webhook: DISCORD_WEBHOOK_URL ? '✅ Set' : '❌ Missing',
+  affiliate_id: AMAZON_ASSOCIATES_ID
+});
+
+// Run once immediately on startup
+runBot();
+
+// Schedule to run every 6 hours (0, 6, 12, 18 UTC)
+cron.schedule('0 */6 * * *', () => {
+  runBot();
+});
+
+console.log('✅ Bot is running. Deals will be fetched every 6 hours.');
+console.log('⏸️  Press Ctrl+C to stop.\n');
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n👋 Bot shutting down gracefully...');
+  process.exit(0);
+});
