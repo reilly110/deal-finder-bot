@@ -30,7 +30,7 @@ async function fetchDealsFromKeepa() {
       domainId: 2,                       // UK Amazon - REQUIRED
       priceTypes: [0],                   // AMAZON price type - REQUIRED
       dateRange: 0,                      // Last 24 hours
-      deltaPercentRange: [20, 100],      // 70-100% price drop (deals) - THIS FINDS DEALS
+      deltaPercentRange: [50, 100],      // 50-100% price drop - LOWERED TO TEST
       isFilterEnabled: true              // Enable filters
     };
 
@@ -52,6 +52,7 @@ async function fetchDealsFromKeepa() {
     const responseData = await response.json();
 
     console.log(`API Response Status: ${response.status}`);
+    console.log('Full Response:', JSON.stringify(responseData, null, 2));
 
     if (!response.ok) {
       console.error(`Keepa API error: ${response.status} ${response.statusText}`);
@@ -226,4 +227,3 @@ process.on('SIGINT', () => {
   console.log('\n👋 Bot shutting down gracefully...');
   process.exit(0);
 });
-
