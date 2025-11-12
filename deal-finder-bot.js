@@ -70,14 +70,18 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    const deals = products.slice(0, 10).map(p => ({
-      asin: p.asin,
-      title: p.title || 'Product',
-      currentPrice: p.current ? (p.current[0] / 100).toFixed(2) : 'N/A',
-      avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
-      discount: Math.abs(p.delta && p.delta[0] ? p.delta[0] : 0),
-      link: `https://amazon.co.uk/dp/${p.asin}`
-    }));
+    const deals = products.slice(0, 10).map(p => {
+      console.log('DEBUG delta:', p.delta, 'type:', typeof p.delta);
+      const discount = Math.abs(p.delta && p.delta[0] ? p.delta[0] : 0);
+      return {
+        asin: p.asin,
+        title: p.title || 'Product',
+        currentPrice: p.current ? (p.current[0] / 100).toFixed(2) : 'N/A',
+        avgPrice: p.avg ? (p.avg[0] / 100).toFixed(2) : 'N/A',
+        discount: discount,
+        link: `https://amazon.co.uk/dp/${p.asin}`
+      };
+    });
     
     console.log('Top 5 discounts found:', deals.slice(0, 5).map(d => `${d.discount}% - ${d.title.substring(0, 40)}`));
     
