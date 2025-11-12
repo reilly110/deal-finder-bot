@@ -67,16 +67,21 @@ async function fetchDealsFromKeepa() {
       return [];
     }
 
-    // Check if we got products
-    if (!responseData.products || responseData.products.length === 0) {
+    // Debug: log what fields exist in response
+    console.log('Response keys:', Object.keys(responseData).slice(0, 10));
+
+    // Check if we got products - they might be directly in the response or in a different field
+    let products = responseData.products || responseData.data || Object.values(responseData).find(item => Array.isArray(item) && item.length > 0);
+    
+    if (!products || products.length === 0) {
       console.log('ℹ️  No deals found matching criteria');
       return [];
     }
 
-    console.log(`✅ Got ${responseData.products.length} deals from Keepa`);
+    console.log(`✅ Got ${products.length} deals from Keepa`);
 
     // Process products into formatted deals
-    const deals = responseData.products
+    const deals = products
       .map(product => {
         // Extract prices - Keepa stores prices as integers (pence for UK)
         const currentPrice = product.current && product.current.length > 0
