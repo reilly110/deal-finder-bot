@@ -24,7 +24,7 @@ async function scrapeDeals() {
       }
     });
     
-    const feed = await customParser.parseURL('https://slickdeals.net/deals/amazon-deals/?rss=1');
+    const feed = await customParser.parseURL('https://camelcamelcamel.com/popular?deal=1&rss=1');
     
     console.log(`📰 Got ${feed.items.length} items from RSS feed`);
     
@@ -32,37 +32,38 @@ async function scrapeDeals() {
 
     feed.items.forEach(item => {
       try {
-        // Extract ASIN from title or link
+        // Extract ASIN from link
         let asin = '';
-        
-        // Try to extract from link (usually has /dp/ASIN)
         if (item.link) {
-          const match = item.link.match(/\/dp\/([A-Z0-9]+)/);
+          const match = item.link.match(/\/product\/([A-Z0-9]+)/);
           if (match) asin = match[1];
         }
-        
         if (!asin) return;
 
         const title = item.title || 'Product';
-        const description = item.content || item.description || '';
+        const description = item.description || '';
 
-        // Parse description for prices
-        // Format usually: "Current Price: $XX.XX | List Price: $YY.YY"
-        const currentPriceMatch = description.match(/\$?([\d,]+\.?\d*)/);
-        const prices = description.match(/\$([\d,]+\.?\d*)/g);
+        // Parse prices from description
+        // Format: "Current Price: $X | List Price: $Y | Avg. Price: $Z"
+        const currentMatch = description.match(/Current Price:.*?\$?([\d,]+\.?\d*)/);
+        const avgMatch = description.match(/Avg\.\s*Price:.*?\$?([\d,]+\.?\d*)/);
+        const listMatch = description.match(/List Price:.*?\$?([\d,]+\.?\d*)/);
 
-        if (!currentPriceMatch || prices.length < 2) return;
+        if (!currentMatch || !avgMatch) return;
 
-        const currentPrice = parseFloat(currentPriceMatch[1].replace(/,/g, ''));
-        const originalPrice = parseFloat(prices[prices.length - 1].replace(/\$/g, '').replace(/,/g, ''));
+        const currentPrice = parseFloat(currentMatch[1].replace(/,/g, ''));
+        const avgPrice = parseFloat(avgMatch[1].replace(/,/g, ''));
+        const listPrice = listMatch ? parseFloat(listMatch[1].replace(/,/g, '')) : avgPrice;
 
-        if (currentPrice <= 0 || originalPrice <= 0) return;
+        if (currentPrice <= 0 || avgPrice <= 0) return;
 
-        // Calculate discount
+        // Calculate discount using Avg Price as baseline
         let discount = 0;
-        if (originalPrice > currentPrice) {
-          discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+        if (avgPrice > currentPrice) {
+          discount = Math.round(((avgPrice - currentPrice) / avgPrice) * 100);
         }
+
+        console.log(`${title.substring(0, 40)} | ${discount}% | $${currentPrice.toFixed(2)}`);
 
         // Only include if >50% off
         if (discount >= MIN_DISCOUNT) {
@@ -70,7 +71,7 @@ async function scrapeDeals() {
             asin: asin,
             title: title,
             currentPrice: currentPrice.toFixed(2),
-            originalPrice: originalPrice.toFixed(2),
+            avgPrice: avgPrice.toFixed(2),
             discount: discount,
             link: `https://amazon.com/dp/${asin}`
           });
@@ -102,7 +103,7 @@ async function postToDiscord(deals) {
       title: `🔥 ${d.title.substring(0, 80)}`,
       description: `**${d.discount}% OFF** - $${d.currentPrice}`,
       fields: [
-        { name: 'Was', value: `$${d.originalPrice}`, inline: true },
+        { name: 'Avg Price', value: `$${d.avgPrice}`, inline: true },
         { name: 'Now', value: `$${d.currentPrice}`, inline: true },
         { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! $${d.currentPrice} #AmazonDeals`, inline: false },
         { name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
