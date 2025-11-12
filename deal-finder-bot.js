@@ -20,8 +20,8 @@ async function fetchDealsFromKeepa() {
       page: 0,
       domainId: 2,
       priceTypes: [0],
-      dateRange: 0,
-      deltaPercentRange: [50, 100],
+      dateRange: 1,  // Last 7 days instead of 24 hours
+      deltaPercentRange: [10, 100],  // 10% instead of 50%
       isFilterEnabled: true
     };
 
@@ -145,8 +145,8 @@ const server = http.createServer(async (req, res) => {
         page: 0,
         domainId: 2,
         priceTypes: [0],
-        dateRange: 0,
-        deltaPercentRange: [50, 100],
+        dateRange: 1,
+        deltaPercentRange: [10, 100],
         isFilterEnabled: true
       };
 
