@@ -69,10 +69,10 @@ async function fetchDealsFromKeepa() {
       const currentPrice = (Array.isArray(p.current) && p.current[0]) ? p.current[0] : 0;
       const avgPrice = (Array.isArray(p.avg) && Array.isArray(p.avg[0]) && p.avg[0][0]) ? p.avg[0][0] : 0;
       
-      // USE KEEPA'S DELTA DISCOUNT DIRECTLY
+      // USE deltaPercent[0][0] - KEEPA'S CURRENT DISCOUNT PERCENTAGE
       let discount = 0;
-      if (Array.isArray(p.delta) && Array.isArray(p.delta[0]) && p.delta[0][0] !== undefined) {
-        discount = Math.abs(p.delta[0][0]);  // This is Keepa's calculated percentage
+      if (Array.isArray(p.deltaPercent) && Array.isArray(p.deltaPercent[0])) {
+        discount = Math.abs(p.deltaPercent[0][0]);
       }
       
       return {
