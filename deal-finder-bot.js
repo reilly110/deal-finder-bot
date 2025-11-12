@@ -21,7 +21,7 @@ async function fetchDealsFromKeepa() {
       domainId: 2,
       priceTypes: [0],
       dateRange: 1,  // Last 7 days instead of 24 hours
-      deltaPercentRange: [50, 100],  // 50% off
+      deltaPercentRange: [51, 100],  // >50% off (strictly greater)
       isFilterEnabled: true
     };
 
@@ -97,11 +97,12 @@ async function postToDiscord(deals) {
   try {
     const embeds = deals.map(d => ({
       title: `🔥 ${d.title.substring(0, 80)}`,
-      description: `**${d.discount}% OFF**`,
+      description: `**${d.discount}% OFF** - £${d.currentPrice}`,
       fields: [
-        { name: 'Price', value: `£${d.currentPrice}`, inline: true },
-        { name: 'Discount', value: `${d.discount}%`, inline: true },
-        { name: 'Link', value: `[Buy](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
+        { name: 'Was', value: `£${d.avgPrice}`, inline: true },
+        { name: 'Now', value: `£${d.currentPrice}`, inline: true },
+        { name: '📱 Share on X', value: `${d.title.substring(0, 50)}... 🔥 ${d.discount}% OFF! £${d.currentPrice} #AmazonDeals`, inline: false },
+        { name: 'Link', value: `[Buy Now](${d.link}?tag=${AMAZON_ASSOCIATES_ID})`, inline: false }
       ],
       color: 16711680
     }));
@@ -158,7 +159,7 @@ const server = http.createServer(async (req, res) => {
         domainId: 2,
         priceTypes: [0],
         dateRange: 1,
-        deltaPercentRange: [50, 100],
+        deltaPercentRange: [51, 100],
         isFilterEnabled: true
       };
 
